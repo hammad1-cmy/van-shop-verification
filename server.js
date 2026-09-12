@@ -215,8 +215,12 @@ app.get('/api/backup-download', asyncHandler(async (req, res) => {
 // Full backup with embedded photo thumbnails - slower (downloads + resizes every
 // photo), so it's only built when explicitly requested, never automatically.
 app.get('/api/backup-download-photos', asyncHandler(async (req, res) => {
-  const buffer = await buildWorkbookWithPhotosBuffer();
-  res.setHeader('Content-Disposition', 'attachment; filename="shops_backup_with_photos.xlsx"');
+  // Optional ?van=N keeps the export small enough to finish quickly once there
+  // are hundreds of shops; omitting it exports every van.
+  const vanId = req.query.van ? parseInt(req.query.van, 10) : null;
+  const buffer = await buildWorkbookWithPhotosBuffer(Number.isFinite(vanId) ? vanId : null);
+  const suffix = vanId ? `_van${vanId}` : '';
+  res.setHeader('Content-Disposition', `attachment; filename="shops_backup_with_photos${suffix}.xlsx"`);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buffer);
 }));
