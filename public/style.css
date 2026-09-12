@@ -83,7 +83,53 @@ body {
 .view-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .view-header h2 { margin: 0; }
 .spacer { flex: 1; }
-#shopSearch { padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--panel2); color: var(--text); min-width: 220px; }
+#shopSearch, #dashboardSearch { padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--panel2); color: var(--text); min-width: 220px; }
+#dashboardVanFilter, #dashboardDayFilter {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  color: var(--text);
+}
+
+.day-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(79, 140, 255, 0.15);
+  padding: 1px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.dashboard-table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.dashboard-table th {
+  text-align: left;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.dashboard-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.dashboard-table tbody tr { cursor: pointer; }
+.dashboard-table tbody tr:hover { background: var(--panel2); }
 
 .add-row {
   display: flex;
