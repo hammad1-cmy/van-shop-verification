@@ -225,7 +225,17 @@ function renderPhotos(photos) {
 let autoSaveTimer = null;
 const shopForm = el('#shopForm');
 
-async function saveShopForm(shopIdAtSaveTime) {
+// Saves for a shop run strictly one-at-a-time, in the order they were requested.
+// Without this, two quick saves in flight together could resolve out of order
+// and let an older snapshot silently overwrite a newer one.
+let saveChain = Promise.resolve();
+
+function saveShopForm(shopIdAtSaveTime) {
+  saveChain = saveChain.then(() => doSaveShopForm(shopIdAtSaveTime));
+  return saveChain;
+}
+
+async function doSaveShopForm(shopIdAtSaveTime) {
   const saveState = el('#saveState');
   saveState.textContent = 'Saving...';
   saveState.className = 'save-state saving';
@@ -415,6 +425,9 @@ function renderDashboard() {
 
   sortShops(rows, el('#dashboardSort').value);
 
+  renderDashboardStats(rows, van, day);
+  renderDashboardChart(rows);
+
   const body = el('#dashboardTableBody');
   body.innerHTML = '';
   for (const s of rows) {
@@ -431,6 +444,67 @@ function renderDashboard() {
     tr.onclick = () => openShop(s.id, true);
     body.appendChild(tr);
   }
+}
+
+function renderDashboardStats(rows, vanFilter, dayFilter) {
+  const container = el('#dashboardStats');
+  const totalBalance = rows.reduce((sum, s) => sum + (balanceValue(s) || 0), 0);
+  const withBalance = rows.filter(s => balanceValue(s) !== null).length;
+  const verifiedCount = rows.filter(s => s.verified_at).length;
+  const totalPhotos = rows.reduce((sum, s) => sum + (s.photoCount || 0), 0);
+
+  const scopeText = [
+    vanFilter ? `Van ${vanFilter}` : null,
+    dayFilter ? `Day ${dayFilter}` : null,
+  ].filter(Boolean).join(', ') || 'All Vans / All Days';
+
+  container.innerHTML = `
+    <div class="stat-tile">
+      <div class="stat-value">${rows.length}</div>
+      <div class="stat-label">Shops (${scopeText})</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-value">${totalBalance.toLocaleString()}</div>
+      <div class="stat-label">Total Balance (${withBalance} shops with a value)</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-value">${verifiedCount}/${rows.length}</div>
+      <div class="stat-label">Verified</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-value">${totalPhotos}</div>
+      <div class="stat-label">Photos Uploaded</div>
+    </div>
+  `;
+}
+
+function renderDashboardChart(rows) {
+  const withBalance = rows
+    .map(s => ({ label: s.shop_code, value: balanceValue(s) }))
+    .filter(s => s.value !== null && s.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 12); // keep the chart readable even with hundreds of shops
+
+  el('#chartScopeLabel').textContent = withBalance.length
+    ? `(top ${withBalance.length} by balance)`
+    : '';
+
+  const chart = el('#dashboardChart');
+  if (withBalance.length === 0) {
+    chart.innerHTML = '<div class="chart-empty">No shops with a balance value in this view yet.</div>';
+    return;
+  }
+
+  const max = Math.max(...withBalance.map(s => s.value));
+  chart.innerHTML = withBalance.map(s => `
+    <div class="bar-row">
+      <div class="bar-label" title="${s.label}">${s.label}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${Math.max(2, (s.value / max) * 100)}%"></div>
+      </div>
+      <div class="bar-value">${s.value.toLocaleString()}</div>
+    </div>
+  `).join('');
 }
 
 el('#dashboardBtn').addEventListener('click', () => {
