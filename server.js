@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const { pool, init } = require('./db');
 const { ensureBuckets, uploadPhoto, getSignedUrl, deletePhoto } = require('./storage');
-const { runBackup, buildWorkbookBuffer, buildWorkbookWithPhotosBuffer } = require('./backup');
+const { runBackup, scheduleBackup, buildWorkbookBuffer, buildWorkbookWithPhotosBuffer } = require('./backup');
 const auth = require('./auth');
 
 const app = express();
@@ -70,7 +70,7 @@ app.post('/api/vans/:vanId/shops', asyncHandler(async (req, res) => {
       'INSERT INTO shops (van_id, shop_code, customer_name) VALUES ($1, $2, $3) RETURNING *',
       [req.params.vanId, String(shop_code).trim(), customer_name || '']
     );
-    runBackup();
+    scheduleBackup();
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'A shop with this code already exists in this van' });
@@ -103,7 +103,7 @@ app.post('/api/vans/:vanId/shops/bulk', asyncHandler(async (req, res) => {
   } finally {
     client.release();
   }
-  runBackup();
+  scheduleBackup();
   res.json({ ok: true, added: count });
 }));
 
@@ -130,7 +130,7 @@ app.put('/api/shops/:shopId', asyncHandler(async (req, res) => {
       RETURNING *
     `, [shop_code, customer_name, notes, stock_status, balance_amount, verified_at, visitDayProvided, visitDayValue, req.params.shopId]);
     if (!rows[0]) return res.status(404).json({ error: 'Shop not found' });
-    runBackup();
+    scheduleBackup();
     res.json(rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'A shop with this code already exists in this van' });
@@ -154,7 +154,7 @@ app.delete('/api/shops/:shopId', asyncHandler(async (req, res) => {
   const { rows: photos } = await pool.query('SELECT * FROM photos WHERE shop_id = $1', [req.params.shopId]);
   await pool.query('DELETE FROM shops WHERE id = $1', [req.params.shopId]);
   for (const p of photos) deletePhoto(p.storage_path).catch(() => {});
-  runBackup();
+  scheduleBackup();
   res.json({ ok: true });
 }));
 
@@ -181,7 +181,7 @@ app.post('/api/shops/:shopId/photos', (req, res) => {
           [shopId, category, storagePath]
         );
       }
-      runBackup();
+      scheduleBackup();
       const { rows: photos } = await pool.query('SELECT * FROM photos WHERE shop_id = $1 ORDER BY uploaded_at', [shopId]);
       const withUrls = await Promise.all(photos.map(async p => ({
         ...p,
@@ -200,7 +200,7 @@ app.delete('/api/photos/:photoId', asyncHandler(async (req, res) => {
   if (!rows[0]) return res.status(404).json({ error: 'Photo not found' });
   await pool.query('DELETE FROM photos WHERE id = $1', [req.params.photoId]);
   await deletePhoto(rows[0].storage_path).catch(() => {});
-  runBackup();
+  scheduleBackup();
   res.json({ ok: true });
 }));
 
