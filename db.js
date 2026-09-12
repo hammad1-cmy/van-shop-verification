@@ -43,6 +43,8 @@ async function init() {
       storage_path TEXT NOT NULL,
       uploaded_at TIMESTAMPTZ DEFAULT now()
     );
+
+    ALTER TABLE shops ADD COLUMN IF NOT EXISTS visit_day INTEGER;
   `);
 
   const { rows } = await pool.query('SELECT COUNT(*)::int AS c FROM vans');
