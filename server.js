@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const { pool, init } = require('./db');
 const { ensureBuckets, uploadPhoto, getSignedUrl, deletePhoto } = require('./storage');
-const { runBackup, buildWorkbookBuffer } = require('./backup');
+const { runBackup, buildWorkbookBuffer, buildWorkbookWithPhotosBuffer } = require('./backup');
 const auth = require('./auth');
 
 const app = express();
@@ -185,10 +185,19 @@ app.delete('/api/photos/:photoId', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Download the backup workbook straight from the browser, any time
+// Download the backup workbook straight from the browser, any time (data only, fast)
 app.get('/api/backup-download', asyncHandler(async (req, res) => {
   const buffer = await buildWorkbookBuffer();
   res.setHeader('Content-Disposition', 'attachment; filename="shops_backup.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buffer);
+}));
+
+// Full backup with embedded photo thumbnails - slower (downloads + resizes every
+// photo), so it's only built when explicitly requested, never automatically.
+app.get('/api/backup-download-photos', asyncHandler(async (req, res) => {
+  const buffer = await buildWorkbookWithPhotosBuffer();
+  res.setHeader('Content-Disposition', 'attachment; filename="shops_backup_with_photos.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buffer);
 }));
