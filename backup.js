@@ -13,8 +13,14 @@ async function buildWorkbookBuffer() {
     ORDER BY v.id, s.shop_code
   `);
 
+  const formatted = rows.map(r => ({
+    ...r,
+    created_at: r.created_at ? new Date(r.created_at).toISOString().replace('T', ' ').slice(0, 19) : '',
+    updated_at: r.updated_at ? new Date(r.updated_at).toISOString().replace('T', ' ').slice(0, 19) : '',
+  }));
+
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const ws = XLSX.utils.json_to_sheet(formatted);
   XLSX.utils.book_append_sheet(wb, ws, 'Shops');
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
