@@ -9,8 +9,14 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
   console.error('Missing SUPABASE_URL / SUPABASE_SERVICE_KEY env vars.');
 }
 
+// We never use Supabase Realtime, but the client always constructs a RealtimeClient,
+// which on Node < 22 throws if there's no native WebSocket. Supplying the 'ws' package
+// here avoids that crash regardless of which Node version ends up running this.
+const WebSocket = require('ws');
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
+  realtime: { transport: WebSocket },
 });
 
 async function ensureBuckets() {
