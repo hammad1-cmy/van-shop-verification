@@ -11,10 +11,10 @@ function formatDate(d) {
 async function fetchShopsWithPhotos() {
   const { rows: shops } = await pool.query(`
     SELECT s.id, v.name AS van, s.shop_code, s.customer_name, s.notes,
-           s.stock_status, s.balance_amount, s.verified_at, s.created_at, s.updated_at
+           s.stock_status, s.balance_amount, s.verified_at, s.visit_day, s.created_at, s.updated_at
     FROM shops s
     JOIN vans v ON v.id = s.van_id
-    ORDER BY v.id, s.shop_code
+    ORDER BY v.id, s.visit_day NULLS LAST, s.shop_code
   `);
   const { rows: photos } = await pool.query(`
     SELECT id, shop_id, storage_path, uploaded_at FROM photos ORDER BY shop_id, uploaded_at
@@ -35,6 +35,7 @@ async function buildWorkbookBuffer() {
     van: s.van,
     shop_code: s.shop_code,
     customer_name: s.customer_name,
+    day: s.visit_day || '',
     notes: s.notes,
     stock_status: s.stock_status,
     balance_amount: s.balance_amount,
@@ -63,7 +64,7 @@ async function runBackup() {
 // photo, so it's slower - only built on demand when someone clicks
 // "Download with Photos", never automatically after every save.
 const THUMB_SIZE = 120;
-const COLS = ['Van', 'Shop Code', 'Customer', 'Stock Status', 'Balance', 'Notes', 'Verified Date', 'Updated'];
+const COLS = ['Van', 'Day', 'Shop Code', 'Customer', 'Stock Status', 'Balance', 'Notes', 'Verified Date', 'Updated'];
 const PHOTO_COL_START = COLS.length; // 0-indexed column where photo thumbnails begin
 const MAX_PHOTOS = 8;
 
@@ -84,6 +85,7 @@ async function buildWorkbookWithPhotosBuffer() {
   for (const shop of shops) {
     const rowValues = [
       shop.van,
+      shop.visit_day ? `Day ${shop.visit_day}` : '',
       shop.shop_code,
       shop.customer_name,
       shop.stock_status,
