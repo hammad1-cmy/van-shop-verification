@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Van Shop Verification</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="toast" class="toast"></div>
+
+<header class="topbar">
+  <h1>Van Shop Verification</h1>
+  <div class="topbar-actions">
+    <span id="statusPill" class="status-pill">Ready</span>
+    <button id="backupNowBtn" class="btn ghost">Backup now</button>
+  </div>
+</header>
+
+<main id="app">
+  <!-- VAN LIST VIEW -->
+  <section id="vanView" class="view">
+    <h2>Select a Van</h2>
+    <div id="vanGrid" class="van-grid"></div>
+  </section>
+
+  <!-- SHOP LIST VIEW -->
+  <section id="shopListView" class="view hidden">
+    <div class="view-header">
+      <button class="btn back" data-action="back-to-vans">&larr; Vans</button>
+      <h2 id="shopListTitle">Van</h2>
+      <div class="spacer"></div>
+      <input id="shopSearch" type="search" placeholder="Search shop code or customer..." />
+    </div>
+
+    <div class="add-row">
+      <input id="newShopCode" placeholder="Shop code (e.g. SHOP-091)" />
+      <input id="newShopCustomer" placeholder="Customer name (optional)" />
+      <button class="btn primary" data-action="add-shop">+ Add Shop</button>
+      <span class="or">or</span>
+      <input id="bulkCount" type="number" min="1" max="200" placeholder="Bulk count e.g. 90" style="width:110px" />
+      <button class="btn" data-action="bulk-add">Bulk Create Empty Slots</button>
+    </div>
+
+    <div id="shopGrid" class="shop-grid"></div>
+  </section>
+
+  <!-- SHOP DETAIL VIEW -->
+  <section id="shopDetailView" class="view hidden">
+    <div class="view-header">
+      <button class="btn back" data-action="back-to-shops">&larr; Shops</button>
+      <h2 id="shopDetailTitle">Shop</h2>
+      <div class="spacer"></div>
+      <span id="saveState" class="save-state"></span>
+    </div>
+
+    <div class="detail-grid">
+      <form id="shopForm" class="shop-form">
+        <label>Shop Code
+          <input name="shop_code" required />
+        </label>
+        <label>Customer Name
+          <input name="customer_name" />
+        </label>
+        <label>Stock Status
+          <textarea name="stock_status" rows="2" placeholder="What stock was found..."></textarea>
+        </label>
+        <label>Balance Amount
+          <input name="balance_amount" placeholder="e.g. 1250" />
+        </label>
+        <label>Notes
+          <textarea name="notes" rows="3"></textarea>
+        </label>
+        <label>Verified Date
+          <input type="date" name="verified_at" />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Save Shop Data</button>
+          <button type="button" class="btn danger" data-action="delete-shop">Delete Shop</button>
+        </div>
+      </form>
+
+      <div class="photos-panel">
+        <h3>Photos <span id="photoCount" class="muted"></span></h3>
+        <p class="hint">Up to 8 photos per shop (stock, balance, shopkeeper, shop front, etc.)</p>
+        <input id="photoInput" type="file" accept="image/*" multiple capture="environment" />
+        <button class="btn primary" data-action="upload-photos">Upload Selected Photos</button>
+        <div id="photoGrid" class="photo-grid"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
