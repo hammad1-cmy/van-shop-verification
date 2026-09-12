@@ -275,6 +275,11 @@ el('#backupNowBtn').addEventListener('click', async () => {
   }
 });
 
+el('#backupPhotosBtn').addEventListener('click', () => {
+  toast('Building backup with photos, this can take a while...', '');
+  window.open('/api/backup-download-photos', '_blank');
+});
+
 // Warn before leaving with unsaved edits (best-effort)
 window.addEventListener('beforeunload', (e) => {
   // Data is saved per-field-submit, so this is just a safety net during active typing
