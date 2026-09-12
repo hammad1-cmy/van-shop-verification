@@ -55,6 +55,12 @@ async function deletePhoto(storagePath) {
   await supabase.storage.from(BUCKET).remove([storagePath]);
 }
 
+async function downloadPhotoBuffer(storagePath) {
+  const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
+  if (error) throw error;
+  return Buffer.from(await data.arrayBuffer());
+}
+
 async function uploadBackup(buffer) {
   await supabase.storage.from(BACKUP_BUCKET).upload('shops_backup.xlsx', buffer, {
     contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -62,4 +68,4 @@ async function uploadBackup(buffer) {
   });
 }
 
-module.exports = { supabase, ensureBuckets, uploadPhoto, getSignedUrl, deletePhoto, uploadBackup, BUCKET, BACKUP_BUCKET };
+module.exports = { supabase, ensureBuckets, uploadPhoto, getSignedUrl, deletePhoto, downloadPhotoBuffer, uploadBackup, BUCKET, BACKUP_BUCKET };
