@@ -5,6 +5,8 @@ const state = {
   currentShopId: null,
   cameFromDashboard: false,
   dashboardShops: [],
+  lightboxPhotos: [],
+  lightboxIndex: 0,
 };
 
 const el = (sel) => document.querySelector(sel);
@@ -195,11 +197,14 @@ function renderPhotos(photos) {
   el('#photoCount').textContent = `(${photos.length}/8)`;
   const grid = el('#photoGrid');
   grid.innerHTML = '';
-  for (const p of photos) {
+  photos.forEach((p, i) => {
     const div = document.createElement('div');
     div.className = 'photo-thumb';
     div.innerHTML = `<img src="${p.signed_url}" alt="shop photo" loading="lazy" /><button class="del" title="Delete photo">✕</button>`;
-    div.querySelector('.del').onclick = async () => {
+    div.querySelector('img').onclick = () => openLightbox(photos, i);
+    div.querySelector('.del').onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete this photo?')) return;
       try {
         await api(`/api/photos/${p.id}`, { method: 'DELETE' });
         toast('Photo deleted', 'ok');
@@ -209,7 +214,7 @@ function renderPhotos(photos) {
       }
     };
     grid.appendChild(div);
-  }
+  });
 }
 
 el('#shopForm').addEventListener('submit', async (e) => {
@@ -291,9 +296,40 @@ el('#backupNowBtn').addEventListener('click', async () => {
 });
 
 el('#backupPhotosBtn').addEventListener('click', () => {
-  toast('Building backup with photos, this can take a while...', '');
-  window.open('/api/backup-download-photos', '_blank');
+  // If a van is selected on the dashboard, export just that van - a full
+  // 5-van export with hundreds of photos takes a lot longer to build.
+  const van = el('#dashboardVanFilter').value;
+  const url = van ? `/api/backup-download-photos?van=${van}` : '/api/backup-download-photos';
+  toast(van ? `Building Van ${van} backup with photos...` : 'Building full backup with photos, this can take a while...', '');
+  window.open(url, '_blank');
 });
+
+// Balance is stored as free text, so parse leniently; anything unparseable
+// (blank, "n/a", etc.) sorts to the bottom regardless of direction.
+function balanceValue(shop) {
+  const n = parseFloat(String(shop.balance_amount || '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function sortShops(rows, mode) {
+  const byBalance = (dir) => (a, b) => {
+    const av = balanceValue(a);
+    const bv = balanceValue(b);
+    if (av === null && bv === null) return a.shop_code.localeCompare(b.shop_code);
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    return dir === 'desc' ? bv - av : av - bv;
+  };
+
+  switch (mode) {
+    case 'balance_desc': rows.sort(byBalance('desc')); break;
+    case 'balance_asc': rows.sort(byBalance('asc')); break;
+    case 'code': rows.sort((a, b) => a.shop_code.localeCompare(b.shop_code)); break;
+    case 'photos_desc': rows.sort((a, b) => (b.photoCount || 0) - (a.photoCount || 0)); break;
+    default: break; // server already returns van -> day -> code order
+  }
+  return rows;
+}
 
 // ---------------- Dashboard (all shops, all vans) ----------------
 async function loadDashboard() {
@@ -316,6 +352,8 @@ function renderDashboard() {
     if (q && !s.shop_code.toLowerCase().includes(q) && !(s.customer_name || '').toLowerCase().includes(q)) return false;
     return true;
   });
+
+  sortShops(rows, el('#dashboardSort').value);
 
   const body = el('#dashboardTableBody');
   body.innerHTML = '';
@@ -345,7 +383,55 @@ document.querySelector('[data-action="back-to-vans-from-dashboard"]').addEventLi
 });
 el('#dashboardVanFilter').addEventListener('change', renderDashboard);
 el('#dashboardDayFilter').addEventListener('change', renderDashboard);
+el('#dashboardSort').addEventListener('change', renderDashboard);
 el('#dashboardSearch').addEventListener('input', renderDashboard);
+
+// ---------------- Fullscreen photo viewer ----------------
+const lightbox = el('#lightbox');
+
+function openLightbox(photos, index) {
+  state.lightboxPhotos = photos.filter(p => p.signed_url);
+  state.lightboxIndex = Math.max(0, Math.min(index, state.lightboxPhotos.length - 1));
+  lightbox.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  showLightboxPhoto();
+}
+
+function showLightboxPhoto() {
+  const photo = state.lightboxPhotos[state.lightboxIndex];
+  if (!photo) return closeLightbox();
+  el('#lbImage').src = photo.signed_url;
+  el('#lbCounter').textContent = `${state.lightboxIndex + 1} / ${state.lightboxPhotos.length}`;
+  const multiple = state.lightboxPhotos.length > 1;
+  el('#lbPrev').style.display = multiple ? '' : 'none';
+  el('#lbNext').style.display = multiple ? '' : 'none';
+}
+
+function stepLightbox(delta) {
+  const count = state.lightboxPhotos.length;
+  if (count === 0) return;
+  state.lightboxIndex = (state.lightboxIndex + delta + count) % count; // wraps around
+  showLightboxPhoto();
+}
+
+function closeLightbox() {
+  lightbox.classList.add('hidden');
+  el('#lbImage').src = '';
+  document.body.style.overflow = '';
+}
+
+el('#lbClose').addEventListener('click', closeLightbox);
+el('#lbPrev').addEventListener('click', (e) => { e.stopPropagation(); stepLightbox(-1); });
+el('#lbNext').addEventListener('click', (e) => { e.stopPropagation(); stepLightbox(1); });
+el('#lbImage').addEventListener('click', (e) => e.stopPropagation()); // clicking the photo itself shouldn't close
+lightbox.addEventListener('click', closeLightbox); // clicking the backdrop does
+
+document.addEventListener('keydown', (e) => {
+  if (lightbox.classList.contains('hidden')) return;
+  if (e.key === 'Escape') closeLightbox();
+  else if (e.key === 'ArrowLeft') stepLightbox(-1);
+  else if (e.key === 'ArrowRight') stepLightbox(1);
+});
 
 // Warn before leaving with unsaved edits (best-effort)
 window.addEventListener('beforeunload', (e) => {
