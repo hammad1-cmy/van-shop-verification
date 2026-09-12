@@ -50,6 +50,13 @@
         <option value="6">Day 6</option>
         <option value="7">Day 7</option>
       </select>
+      <select id="dashboardSort">
+        <option value="default">Sort: Van &amp; Day</option>
+        <option value="balance_desc">Balance: High &rarr; Low</option>
+        <option value="balance_asc">Balance: Low &rarr; High</option>
+        <option value="code">Shop Code A&ndash;Z</option>
+        <option value="photos_desc">Most Photos First</option>
+      </select>
       <input id="dashboardSearch" type="search" placeholder="Search shop code or customer..." />
     </div>
     <div id="dashboardTableWrap" class="dashboard-table-wrap">
@@ -143,6 +150,15 @@
     </div>
   </section>
 </main>
+
+<!-- FULLSCREEN PHOTO VIEWER -->
+<div id="lightbox" class="lightbox hidden">
+  <button id="lbClose" class="lb-close" title="Close (Esc)">&times;</button>
+  <button id="lbPrev" class="lb-nav lb-prev" title="Previous (&larr;)">&#8249;</button>
+  <img id="lbImage" class="lb-image" alt="Shop photo" />
+  <button id="lbNext" class="lb-nav lb-next" title="Next (&rarr;)">&#8250;</button>
+  <div id="lbCounter" class="lb-counter"></div>
+</div>
 
 <script src="app.js"></script>
 </body>
