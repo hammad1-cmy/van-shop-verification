@@ -8,14 +8,15 @@ function formatDate(d) {
   return d ? new Date(d).toISOString().replace('T', ' ').slice(0, 19) : '';
 }
 
-async function fetchShopsWithPhotos() {
+async function fetchShopsWithPhotos(vanId = null) {
   const { rows: shops } = await pool.query(`
     SELECT s.id, v.name AS van, s.shop_code, s.customer_name, s.notes,
            s.stock_status, s.balance_amount, s.verified_at, s.visit_day, s.created_at, s.updated_at
     FROM shops s
     JOIN vans v ON v.id = s.van_id
+    WHERE $1::int IS NULL OR s.van_id = $1::int
     ORDER BY v.id, s.visit_day NULLS LAST, s.shop_code
-  `);
+  `, [vanId]);
   const { rows: photos } = await pool.query(`
     SELECT id, shop_id, storage_path, uploaded_at FROM photos ORDER BY shop_id, uploaded_at
   `);
@@ -63,13 +64,13 @@ async function runBackup() {
 // Full backup with embedded photo thumbnails. Downloads + resizes every
 // photo, so it's slower - only built on demand when someone clicks
 // "Download with Photos", never automatically after every save.
-const THUMB_SIZE = 120;
+const THUMB_SIZE = 220;
 const COLS = ['Van', 'Day', 'Shop Code', 'Customer', 'Stock Status', 'Balance', 'Notes', 'Verified Date', 'Updated'];
 const PHOTO_COL_START = COLS.length; // 0-indexed column where photo thumbnails begin
 const MAX_PHOTOS = 8;
 
-async function buildWorkbookWithPhotosBuffer() {
-  const shops = await fetchShopsWithPhotos();
+async function buildWorkbookWithPhotosBuffer(vanId = null) {
+  const shops = await fetchShopsWithPhotos(vanId);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Shops');
@@ -78,9 +79,12 @@ async function buildWorkbookWithPhotosBuffer() {
   for (let i = 1; i <= MAX_PHOTOS; i++) header.push(`Photo ${i}`);
   sheet.addRow(header);
   sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: 'frozen', ySplit: 1 }]; // keep headers visible while scrolling
 
   for (let col = 1; col <= COLS.length; col++) sheet.getColumn(col).width = 20;
-  for (let i = 0; i < MAX_PHOTOS; i++) sheet.getColumn(PHOTO_COL_START + 1 + i).width = 18;
+  // Excel column width is ~7px per unit, so match the thumbnail size
+  const photoColWidth = Math.ceil(THUMB_SIZE / 7);
+  for (let i = 0; i < MAX_PHOTOS; i++) sheet.getColumn(PHOTO_COL_START + 1 + i).width = photoColWidth;
 
   for (const shop of shops) {
     const rowValues = [
