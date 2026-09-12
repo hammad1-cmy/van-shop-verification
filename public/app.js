@@ -3,6 +3,8 @@ const state = {
   currentVanId: null,
   shops: [],
   currentShopId: null,
+  cameFromDashboard: false,
+  dashboardShops: [],
 };
 
 const el = (sel) => document.querySelector(sel);
@@ -99,7 +101,7 @@ function renderShops(filter = '') {
     const card = document.createElement('div');
     card.className = 'shop-card' + (shop.verified_at ? ' verified' : '');
     card.innerHTML = `
-      <div class="code">${shop.shop_code}</div>
+      <div class="code">${shop.shop_code}${shop.visit_day ? ` <span class="day-badge">Day ${shop.visit_day}</span>` : ''}</div>
       <div class="cust">${shop.customer_name || '—'}</div>
       <div class="meta">
         <span class="photos-badge">${shop.photoCount || 0}/8 photos</span>
@@ -154,13 +156,19 @@ document.querySelector('[data-action="back-to-vans"]').addEventListener('click',
   loadVans();
 });
 document.querySelector('[data-action="back-to-shops"]').addEventListener('click', () => {
-  show('shopListView');
-  loadShops();
+  if (state.cameFromDashboard) {
+    show('dashboardView');
+    renderDashboard();
+  } else {
+    show('shopListView');
+    loadShops();
+  }
 });
 
 // ---------------- Shop detail ----------------
-async function openShop(shopId) {
+async function openShop(shopId, fromDashboard = false) {
   state.currentShopId = shopId;
+  state.cameFromDashboard = fromDashboard;
   show('shopDetailView');
   await loadShopDetail();
 }
@@ -172,6 +180,7 @@ async function loadShopDetail() {
     const form = el('#shopForm');
     form.shop_code.value = shop.shop_code || '';
     form.customer_name.value = shop.customer_name || '';
+    form.visit_day.value = shop.visit_day || '';
     form.notes.value = shop.notes || '';
     form.stock_status.value = shop.stock_status || '';
     form.balance_amount.value = shop.balance_amount || '';
@@ -212,6 +221,7 @@ el('#shopForm').addEventListener('submit', async (e) => {
   const payload = {
     shop_code: form.shop_code.value.trim(),
     customer_name: form.customer_name.value.trim(),
+    visit_day: form.visit_day.value,
     notes: form.notes.value,
     stock_status: form.stock_status.value,
     balance_amount: form.balance_amount.value,
@@ -238,8 +248,13 @@ document.querySelector('[data-action="delete-shop"]').addEventListener('click', 
   try {
     await api(`/api/shops/${state.currentShopId}`, { method: 'DELETE' });
     toast('Shop deleted', 'ok');
-    show('shopListView');
-    await loadShops();
+    if (state.cameFromDashboard) {
+      show('dashboardView');
+      await loadDashboard();
+    } else {
+      show('shopListView');
+      await loadShops();
+    }
   } catch (err) {
     toast(err.message, 'err');
   }
@@ -279,6 +294,58 @@ el('#backupPhotosBtn').addEventListener('click', () => {
   toast('Building backup with photos, this can take a while...', '');
   window.open('/api/backup-download-photos', '_blank');
 });
+
+// ---------------- Dashboard (all shops, all vans) ----------------
+async function loadDashboard() {
+  try {
+    state.dashboardShops = await api('/api/dashboard/shops');
+    renderDashboard();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+function renderDashboard() {
+  const van = el('#dashboardVanFilter').value;
+  const day = el('#dashboardDayFilter').value;
+  const q = el('#dashboardSearch').value.trim().toLowerCase();
+
+  const rows = state.dashboardShops.filter(s => {
+    if (van && String(s.van_id) !== van) return false;
+    if (day && String(s.visit_day || '') !== day) return false;
+    if (q && !s.shop_code.toLowerCase().includes(q) && !(s.customer_name || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const body = el('#dashboardTableBody');
+  body.innerHTML = '';
+  for (const s of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${s.van_name}</td>
+      <td>${s.visit_day ? `Day ${s.visit_day}` : '—'}</td>
+      <td>${s.shop_code}</td>
+      <td>${s.customer_name || '—'}</td>
+      <td>${s.balance_amount || '—'}</td>
+      <td>${s.photoCount || 0}/8</td>
+      <td>${s.verified_at || '—'}</td>
+    `;
+    tr.onclick = () => openShop(s.id, true);
+    body.appendChild(tr);
+  }
+}
+
+el('#dashboardBtn').addEventListener('click', () => {
+  show('dashboardView');
+  loadDashboard();
+});
+document.querySelector('[data-action="back-to-vans-from-dashboard"]').addEventListener('click', () => {
+  show('vanView');
+  loadVans();
+});
+el('#dashboardVanFilter').addEventListener('change', renderDashboard);
+el('#dashboardDayFilter').addEventListener('change', renderDashboard);
+el('#dashboardSearch').addEventListener('input', renderDashboard);
 
 // Warn before leaving with unsaved edits (best-effort)
 window.addEventListener('beforeunload', (e) => {
