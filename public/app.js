@@ -158,7 +158,7 @@ document.querySelector('[data-action="back-to-vans"]').addEventListener('click',
 document.querySelector('[data-action="back-to-shops"]').addEventListener('click', () => {
   if (state.cameFromDashboard) {
     show('dashboardView');
-    renderDashboard();
+    loadDashboard();
   } else {
     show('shopListView');
     loadShops();
