@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Van shop verification tracker with photo upload and auto backup",
   "main": "server.js",
-  "engines": { "node": "20.x" },
+  "engines": { "node": "22.x" },
   "scripts": {
     "start": "node server.js"
   },
@@ -12,6 +12,7 @@
     "express": "^4.19.2",
     "multer": "^2.0.1",
     "pg": "^8.12.0",
+    "ws": "^8.18.0",
     "xlsx": "^0.18.5"
   }
 }
