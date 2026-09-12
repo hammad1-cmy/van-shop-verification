@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Van Shop Verification — Sign in</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  body { display: flex; align-items: center; justify-content: center; height: 100vh; }
+  .login-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 28px; width: 320px; text-align: center;
+  }
+  .login-box h1 { font-size: 18px; margin: 0 0 16px; }
+  .login-box input {
+    width: 100%; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--panel2); color: var(--text); font-size: 16px; margin-bottom: 12px; text-align: center;
+  }
+  .login-box .btn { width: 100%; }
+  .err { color: var(--danger); font-size: 13px; min-height: 18px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+  <div class="login-box">
+    <h1>Enter Access Code</h1>
+    <form id="loginForm">
+      <input id="code" type="password" placeholder="Access code" autofocus />
+      <div id="err" class="err"></div>
+      <button class="btn primary" type="submit">Enter</button>
+    </form>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('code').value;
+      const errEl = document.getElementById('err');
+      errEl.textContent = '';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error || 'Failed'; return; }
+        window.location.href = '/';
+      } catch (err) {
+        errEl.textContent = 'Connection error, try again';
+      }
+    });
+  </script>
+</body>
+</html>
