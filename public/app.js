@@ -158,6 +158,7 @@ document.querySelector('[data-action="back-to-vans"]').addEventListener('click',
   loadVans();
 });
 document.querySelector('[data-action="back-to-shops"]').addEventListener('click', () => {
+  flushPendingSave();
   if (state.cameFromDashboard) {
     show('dashboardView');
     loadDashboard();
@@ -217,12 +218,18 @@ function renderPhotos(photos) {
   });
 }
 
-el('#shopForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
+// ---------------- Auto-save shop form ----------------
+// Every field saves itself - typing pauses briefly then saves, dropdowns/dates
+// save the instant they change. The button below still works too, for anyone
+// who wants an explicit "yes it's saved" confirmation.
+let autoSaveTimer = null;
+const shopForm = el('#shopForm');
+
+async function saveShopForm(shopIdAtSaveTime) {
   const saveState = el('#saveState');
   saveState.textContent = 'Saving...';
   saveState.className = 'save-state saving';
-  const form = e.target;
+  const form = shopForm;
   const payload = {
     shop_code: form.shop_code.value.trim(),
     customer_name: form.customer_name.value.trim(),
@@ -233,20 +240,55 @@ el('#shopForm').addEventListener('submit', async (e) => {
     verified_at: form.verified_at.value,
   };
   try {
-    await api(`/api/shops/${state.currentShopId}`, {
+    await api(`/api/shops/${shopIdAtSaveTime}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    saveState.textContent = 'Saved ✓';
-    saveState.className = 'save-state saved';
-    toast('Shop data saved', 'ok');
+    // The shop may have been navigated away from while this request was in flight
+    if (state.currentShopId === shopIdAtSaveTime) {
+      saveState.textContent = 'Saved ✓';
+      saveState.className = 'save-state saved';
+    }
   } catch (err) {
-    saveState.textContent = 'Save failed — try again';
-    saveState.className = 'save-state err';
+    if (state.currentShopId === shopIdAtSaveTime) {
+      saveState.textContent = 'Save failed — will retry';
+      saveState.className = 'save-state err';
+    }
     toast(err.message, 'err');
   }
+}
+
+function scheduleAutoSave(immediate = false) {
+  const shopIdAtSaveTime = state.currentShopId;
+  clearTimeout(autoSaveTimer);
+  const saveState = el('#saveState');
+  saveState.textContent = 'Editing...';
+  saveState.className = 'save-state saving';
+  autoSaveTimer = setTimeout(() => saveShopForm(shopIdAtSaveTime), immediate ? 0 : 700);
+}
+
+shopForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  scheduleAutoSave(true);
 });
+
+// Text fields: debounced auto-save while typing. Dropdowns/dates: save immediately on change.
+['shop_code', 'customer_name', 'notes', 'stock_status', 'balance_amount'].forEach((name) => {
+  shopForm[name].addEventListener('input', () => scheduleAutoSave(false));
+});
+['visit_day', 'verified_at'].forEach((name) => {
+  shopForm[name].addEventListener('change', () => scheduleAutoSave(true));
+});
+
+// Save whatever's pending before leaving the shop, so a fast click-away never drops an edit
+function flushPendingSave() {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+    saveShopForm(state.currentShopId);
+  }
+}
 
 document.querySelector('[data-action="delete-shop"]').addEventListener('click', async () => {
   if (!confirm('Delete this shop and all its photos? This cannot be undone.')) return;
@@ -265,25 +307,32 @@ document.querySelector('[data-action="delete-shop"]').addEventListener('click', 
   }
 });
 
-document.querySelector('[data-action="upload-photos"]').addEventListener('click', async () => {
+async function uploadSelectedPhotos() {
   const input = el('#photoInput');
   const files = input.files;
   if (!files || files.length === 0) return toast('Choose photo(s) first', 'err');
   if (files.length > 8) return toast('Max 8 photos at once', 'err');
+  const shopIdAtUploadTime = state.currentShopId;
 
   const fd = new FormData();
   for (const f of files) fd.append('photos', f);
 
   try {
     setStatus('Uploading...', '');
-    await api(`/api/shops/${state.currentShopId}/photos`, { method: 'POST', body: fd });
+    toast(`Uploading ${files.length} photo(s)...`, '');
+    await api(`/api/shops/${shopIdAtUploadTime}/photos`, { method: 'POST', body: fd });
     input.value = '';
     toast('Photo(s) uploaded', 'ok');
-    await loadShopDetail();
+    if (state.currentShopId === shopIdAtUploadTime) await loadShopDetail();
   } catch (err) {
     toast(err.message, 'err');
   }
-});
+}
+
+// Uploads start the instant photos are picked - no extra click needed.
+// The button stays as a manual fallback (e.g. re-triggering after an error).
+el('#photoInput').addEventListener('change', uploadSelectedPhotos);
+document.querySelector('[data-action="upload-photos"]').addEventListener('click', uploadSelectedPhotos);
 
 el('#backupNowBtn').addEventListener('click', async () => {
   try {
@@ -295,12 +344,23 @@ el('#backupNowBtn').addEventListener('click', async () => {
   }
 });
 
+// Which van (if any) "Download with Photos" should scope to, based on what's
+// on screen right now: browsing a specific van's shops always means "just this
+// van"; the dashboard uses whatever it's filtered to; anywhere else exports everything.
+function currentBackupVanScope() {
+  if (!el('#dashboardView').classList.contains('hidden')) {
+    return el('#dashboardVanFilter').value || null;
+  }
+  if (!el('#shopListView').classList.contains('hidden') || (!el('#shopDetailView').classList.contains('hidden') && !state.cameFromDashboard)) {
+    return state.currentVanId ? String(state.currentVanId) : null;
+  }
+  return null; // van-select screen, or a shop opened from the dashboard: export everything
+}
+
 el('#backupPhotosBtn').addEventListener('click', () => {
-  // If a van is selected on the dashboard, export just that van - a full
-  // 5-van export with hundreds of photos takes a lot longer to build.
-  const van = el('#dashboardVanFilter').value;
+  const van = currentBackupVanScope();
   const url = van ? `/api/backup-download-photos?van=${van}` : '/api/backup-download-photos';
-  toast(van ? `Building Van ${van} backup with photos...` : 'Building full backup with photos, this can take a while...', '');
+  toast(van ? `Building Van ${van} backup with photos...` : 'Building backup with photos for ALL vans, this can take a while...', '');
   window.open(url, '_blank');
 });
 
