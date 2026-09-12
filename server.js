@@ -108,7 +108,13 @@ app.post('/api/vans/:vanId/shops/bulk', asyncHandler(async (req, res) => {
 }));
 
 app.put('/api/shops/:shopId', asyncHandler(async (req, res) => {
-  const { shop_code, customer_name, notes, stock_status, balance_amount, verified_at } = req.body;
+  const { shop_code, customer_name, notes, stock_status, balance_amount, verified_at, visit_day } = req.body;
+  // visit_day is a real column update, not COALESCE: the form always submits it
+  // (blank string to clear, or a number to set), unlike partial API callers.
+  const visitDayProvided = Object.prototype.hasOwnProperty.call(req.body, 'visit_day');
+  const visitDayValue = !visitDayProvided || visit_day === null || visit_day === ''
+    ? null
+    : Math.min(Math.max(parseInt(visit_day, 10) || 1, 1), 7);
   try {
     const { rows } = await pool.query(`
       UPDATE shops SET
@@ -118,10 +124,11 @@ app.put('/api/shops/:shopId', asyncHandler(async (req, res) => {
         stock_status = COALESCE($4, stock_status),
         balance_amount = COALESCE($5, balance_amount),
         verified_at = COALESCE($6, verified_at),
+        visit_day = CASE WHEN $7 THEN $8 ELSE visit_day END,
         updated_at = now()
-      WHERE id = $7
+      WHERE id = $9
       RETURNING *
-    `, [shop_code, customer_name, notes, stock_status, balance_amount, verified_at, req.params.shopId]);
+    `, [shop_code, customer_name, notes, stock_status, balance_amount, verified_at, visitDayProvided, visitDayValue, req.params.shopId]);
     if (!rows[0]) return res.status(404).json({ error: 'Shop not found' });
     runBackup();
     res.json(rows[0]);
@@ -129,6 +136,18 @@ app.put('/api/shops/:shopId', asyncHandler(async (req, res) => {
     if (err.code === '23505') return res.status(409).json({ error: 'A shop with this code already exists in this van' });
     throw err;
   }
+}));
+
+// All shops across every van, for the dashboard view
+app.get('/api/dashboard/shops', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT s.*, v.name AS van_name,
+           (SELECT COUNT(*)::int FROM photos p WHERE p.shop_id = s.id) AS "photoCount"
+    FROM shops s
+    JOIN vans v ON v.id = s.van_id
+    ORDER BY v.id, s.visit_day NULLS LAST, s.shop_code
+  `);
+  res.json(rows);
 }));
 
 app.delete('/api/shops/:shopId', asyncHandler(async (req, res) => {
