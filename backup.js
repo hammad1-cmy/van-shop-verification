@@ -9,8 +9,31 @@ const COMPANY_TAGLINE = 'Distributor of Euro Oil';
 const BRAND_COLOR = 'FF1F3864'; // deep navy, ARGB
 const BRAND_ACCENT = 'FFE8A33D'; // amber accent
 
+// The "as per Shah Oil Traders Ledger" column header shows a fixed reporting
+// date, updated by request each cycle - not auto-generated to today's date.
+// Override via env var when the reporting cycle changes.
+function defaultLedgerDate() {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}-${mm}-${yy}`;
+}
+const LEDGER_AS_OF_DATE = process.env.LEDGER_AS_OF_DATE || defaultLedgerDate();
+
 function formatDate(d) {
   return d ? new Date(d).toISOString().replace('T', ' ').slice(0, 19) : '';
+}
+
+function parseMoney(v) {
+  const n = parseFloat(String(v || '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function computeDifference(shop) {
+  const company = parseMoney(shop.balance_company);
+  const customer = parseMoney(shop.balance_customer);
+  return (company === null || customer === null) ? '' : company - customer;
 }
 
 function colLetter(n) {
@@ -26,7 +49,7 @@ function colLetter(n) {
 async function fetchShopsWithPhotos(vanId = null) {
   const { rows: shops } = await pool.query(`
     SELECT s.id, v.name AS van, s.shop_code, s.customer_name, s.notes,
-           s.stock_status, s.balance_amount, s.verified_at, s.visit_day, s.created_at, s.updated_at
+           s.stock_status, s.balance_company, s.balance_customer, s.verified_at, s.visit_day, s.created_at, s.updated_at
     FROM shops s
     JOIN vans v ON v.id = s.van_id
     WHERE $1::int IS NULL OR s.van_id = $1::int
@@ -47,18 +70,20 @@ async function fetchShopsWithPhotos(vanId = null) {
 async function buildWorkbookBuffer() {
   const shops = await fetchShopsWithPhotos();
   const rows = shops.map(s => ({
-    id: s.id,
-    van: s.van,
-    shop_code: s.shop_code,
-    customer_name: s.customer_name,
-    day: s.visit_day || '',
-    notes: s.notes,
-    stock_status: s.stock_status,
-    balance_amount: s.balance_amount,
-    verified_at: s.verified_at,
-    created_at: formatDate(s.created_at),
-    updated_at: formatDate(s.updated_at),
-    photo_count: s.photos.length,
+    ID: s.id,
+    Van: s.van,
+    Day: s.visit_day || '',
+    'Customer Code': s.shop_code,
+    'Customer Name': s.customer_name,
+    'Stock Status': s.stock_status,
+    'Balance as per Shah Oil Traders Ledger': s.balance_company,
+    'Balance as per Customer Ledger': s.balance_customer,
+    Difference: computeDifference(s),
+    Remarks: s.notes,
+    'Actual Field Visit Date': s.verified_at,
+    'Created At': formatDate(s.created_at),
+    'Last Updated': formatDate(s.updated_at),
+    'Photo Count': s.photos.length,
   }));
 
   const wb = XLSX.utils.book_new();
@@ -84,7 +109,19 @@ async function runBackup() {
 // photo, so it's slower - only built on demand when someone clicks
 // "Download with Photos", never automatically after every save.
 const THUMB_SIZE = 220;
-const COLS = ['Van', 'Day', 'Shop Code', 'Customer', 'Stock Status', 'Balance', 'Notes', 'Verified Date', 'Updated'];
+// Van is included for convenience when browsing an "all vans" export; the
+// remaining 7 columns match the customer verification sheet format exactly
+// (Day and Stock Status are intentionally left out of this specific report).
+const COLS = [
+  'Van',
+  'Customer Code',
+  'Customer Name',
+  'Actual Field Visit Date',
+  `Balance as per Shah Oil Traders Ledger (${LEDGER_AS_OF_DATE})`,
+  'Balance as per Customer Ledger',
+  'Difference',
+  'Remarks',
+];
 const PHOTO_COL_START = COLS.length; // 0-indexed column where photo thumbnails begin
 const MAX_PHOTOS = 8;
 
@@ -134,7 +171,7 @@ async function buildWorkbookWithPhotosBuffer(vanId = null) {
   for (let i = 1; i <= MAX_PHOTOS; i++) header.push(`Photo ${i}`);
   const headerRow = sheet.getRow(HEADER_ROW);
   headerRow.values = header;
-  headerRow.height = 20;
+  headerRow.height = 40; // tall enough to wrap the longer ledger-balance header text
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND_ACCENT } };
@@ -150,6 +187,10 @@ async function buildWorkbookWithPhotosBuffer(vanId = null) {
   sheet.views = [{ state: 'frozen', ySplit: HEADER_ROW }]; // keep title + header visible while scrolling
 
   for (let col = 1; col <= COLS.length; col++) sheet.getColumn(col).width = 20;
+  // The two balance columns and Remarks carry longer values, so give them more room
+  sheet.getColumn(5).width = 26; // Balance as per Shah Oil Traders Ledger
+  sheet.getColumn(6).width = 22; // Balance as per Customer Ledger
+  sheet.getColumn(8).width = 26; // Remarks
   // Excel column width is ~7px per unit, so match the thumbnail size
   const photoColWidth = Math.ceil(THUMB_SIZE / 7);
   for (let i = 0; i < MAX_PHOTOS; i++) sheet.getColumn(PHOTO_COL_START + 1 + i).width = photoColWidth;
@@ -158,14 +199,13 @@ async function buildWorkbookWithPhotosBuffer(vanId = null) {
   for (const shop of shops) {
     const rowValues = [
       shop.van,
-      shop.visit_day ? `Day ${shop.visit_day}` : '',
       shop.shop_code,
       shop.customer_name,
-      shop.stock_status,
-      shop.balance_amount,
-      shop.notes,
       shop.verified_at,
-      formatDate(shop.updated_at),
+      shop.balance_company,
+      shop.balance_customer,
+      computeDifference(shop),
+      shop.notes,
     ];
     const row = sheet.addRow(rowValues);
     row.height = THUMB_SIZE * 0.75; // points, roughly matches thumbnail pixel height
