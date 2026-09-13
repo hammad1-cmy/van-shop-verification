@@ -54,6 +54,7 @@
         <option value="default">Sort: Van &amp; Day</option>
         <option value="balance_desc">Balance: High &rarr; Low</option>
         <option value="balance_asc">Balance: Low &rarr; High</option>
+        <option value="diff_desc">Biggest Difference First</option>
         <option value="code">Shop Code A&ndash;Z</option>
         <option value="photos_desc">Most Photos First</option>
       </select>
@@ -71,8 +72,9 @@
       <table class="dashboard-table">
         <thead>
           <tr>
-            <th>Van</th><th>Day</th><th>Shop Code</th><th>Customer</th>
-            <th>Balance</th><th>Photos</th><th>Verified</th>
+            <th>Van</th><th>Day</th><th>Customer Code</th><th>Customer Name</th>
+            <th>Company Bal.</th><th>Customer Bal.</th><th>Difference</th>
+            <th>Photos</th><th>Visit Date</th>
           </tr>
         </thead>
         <tbody id="dashboardTableBody"></tbody>
@@ -112,13 +114,28 @@
 
     <div class="detail-grid">
       <form id="shopForm" class="shop-form">
-        <label>Shop Code
+        <label>Customer Code
           <input name="shop_code" required />
         </label>
         <label>Customer Name
           <input name="customer_name" />
         </label>
-        <label>Day
+        <label>Actual Field Visit Date
+          <input type="date" name="verified_at" />
+        </label>
+        <label>Balance as per Shah Oil Traders Ledger
+          <input name="balance_company" placeholder="e.g. 12500" inputmode="decimal" />
+        </label>
+        <label>Balance as per Customer Ledger
+          <input name="balance_customer" placeholder="e.g. 11800" inputmode="decimal" />
+        </label>
+        <label>Difference
+          <input id="differenceDisplay" readonly tabindex="-1" placeholder="—" />
+        </label>
+        <label>Remarks
+          <textarea name="notes" rows="3"></textarea>
+        </label>
+        <label class="secondary-field">Day (internal route tracking)
           <select name="visit_day">
             <option value="">Not set</option>
             <option value="1">Day 1</option>
@@ -130,17 +147,8 @@
             <option value="7">Day 7</option>
           </select>
         </label>
-        <label>Stock Status
+        <label class="secondary-field">Stock Status (internal notes)
           <textarea name="stock_status" rows="2" placeholder="What stock was found..."></textarea>
-        </label>
-        <label>Balance Amount
-          <input name="balance_amount" placeholder="e.g. 1250" />
-        </label>
-        <label>Notes
-          <textarea name="notes" rows="3"></textarea>
-        </label>
-        <label>Verified Date
-          <input type="date" name="verified_at" />
         </label>
         <div class="form-actions">
           <button type="submit" class="btn primary">Save Shop Data</button>
