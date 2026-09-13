@@ -195,7 +195,10 @@ async function buildWorkbookWithPhotosBuffer(vanId = null) {
   const photoColWidth = Math.ceil(THUMB_SIZE / 7);
   for (let i = 0; i < MAX_PHOTOS; i++) sheet.getColumn(PHOTO_COL_START + 1 + i).width = photoColWidth;
 
+  // Pass 1: lay out every row first (cheap, no I/O) so we know each shop's
+  // row index before touching any photos.
   let dataRowNum = 0;
+  const photoTasks = []; // { storagePath, rowIndex, col }
   for (const shop of shops) {
     const rowValues = [
       shop.van,
@@ -228,25 +231,36 @@ async function buildWorkbookWithPhotosBuffer(vanId = null) {
     dataRowNum++;
 
     const rowIndex = row.number - 1; // 0-indexed for image anchoring
-
     for (let i = 0; i < Math.min(shop.photos.length, MAX_PHOTOS); i++) {
-      const photo = shop.photos[i];
+      photoTasks.push({ shopId: shop.id, photoId: shop.photos[i].id, storagePath: shop.photos[i].storage_path, rowIndex, col: PHOTO_COL_START + i });
+    }
+  }
+
+  // Pass 2: fetch + resize every photo with bounded concurrency (instead of
+  // one-at-a-time), then embed each result. At hundreds of shops this is the
+  // difference between an export finishing in seconds vs. minutes.
+  const CONCURRENCY = 6;
+  let cursor = 0;
+  async function worker() {
+    while (cursor < photoTasks.length) {
+      const task = photoTasks[cursor++];
       try {
-        const original = await downloadPhotoBuffer(photo.storage_path);
+        const original = await downloadPhotoBuffer(task.storagePath);
         const thumb = await sharp(original)
           .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'cover' })
           .jpeg({ quality: 70 })
           .toBuffer();
         const imageId = workbook.addImage({ buffer: thumb, extension: 'jpeg' });
         sheet.addImage(imageId, {
-          tl: { col: PHOTO_COL_START + i, row: rowIndex },
+          tl: { col: task.col, row: task.rowIndex },
           ext: { width: THUMB_SIZE, height: THUMB_SIZE },
         });
       } catch (err) {
-        console.error(`Could not embed photo ${photo.id} for shop ${shop.id}:`, err.message);
+        console.error(`Could not embed photo ${task.photoId} for shop ${task.shopId}:`, err.message);
       }
     }
   }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, photoTasks.length) }, worker));
 
   // Set once data rows exist, so the filter range covers header + all data
   const lastDataRow = HEADER_ROW + shops.length;
