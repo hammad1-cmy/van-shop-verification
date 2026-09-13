@@ -24,6 +24,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 8px;
   padding: 14px 24px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -32,7 +34,14 @@ body {
   z-index: 5;
 }
 .topbar h1 { font-size: 18px; margin: 0; }
-.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 500px) {
+  .topbar { padding: 10px 14px; }
+  .topbar h1 { font-size: 16px; width: 100%; }
+  .topbar-actions { width: 100%; justify-content: flex-start; }
+  .topbar-actions .btn { font-size: 13px; padding: 7px 10px; }
+}
 
 .status-pill {
   font-size: 12px;
