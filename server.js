@@ -108,7 +108,7 @@ app.post('/api/vans/:vanId/shops/bulk', asyncHandler(async (req, res) => {
 }));
 
 app.put('/api/shops/:shopId', asyncHandler(async (req, res) => {
-  const { shop_code, customer_name, notes, stock_status, balance_amount, verified_at, visit_day } = req.body;
+  const { shop_code, customer_name, notes, stock_status, balance_company, balance_customer, verified_at, visit_day } = req.body;
   // visit_day is a real column update, not COALESCE: the form always submits it
   // (blank string to clear, or a number to set), unlike partial API callers.
   const visitDayProvided = Object.prototype.hasOwnProperty.call(req.body, 'visit_day');
@@ -122,13 +122,14 @@ app.put('/api/shops/:shopId', asyncHandler(async (req, res) => {
         customer_name = COALESCE($2, customer_name),
         notes = COALESCE($3, notes),
         stock_status = COALESCE($4, stock_status),
-        balance_amount = COALESCE($5, balance_amount),
-        verified_at = COALESCE($6, verified_at),
-        visit_day = CASE WHEN $7 THEN $8 ELSE visit_day END,
+        balance_company = COALESCE($5, balance_company),
+        balance_customer = COALESCE($6, balance_customer),
+        verified_at = COALESCE($7, verified_at),
+        visit_day = CASE WHEN $8 THEN $9 ELSE visit_day END,
         updated_at = now()
-      WHERE id = $9
+      WHERE id = $10
       RETURNING *
-    `, [shop_code, customer_name, notes, stock_status, balance_amount, verified_at, visitDayProvided, visitDayValue, req.params.shopId]);
+    `, [shop_code, customer_name, notes, stock_status, balance_company, balance_customer, verified_at, visitDayProvided, visitDayValue, req.params.shopId]);
     if (!rows[0]) return res.status(404).json({ error: 'Shop not found' });
     scheduleBackup();
     res.json(rows[0]);
