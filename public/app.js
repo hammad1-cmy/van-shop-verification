@@ -186,8 +186,10 @@ async function loadShopDetail() {
     form.visit_day.value = shop.visit_day || '';
     form.notes.value = shop.notes || '';
     form.stock_status.value = shop.stock_status || '';
-    form.balance_amount.value = shop.balance_amount || '';
+    form.balance_company.value = shop.balance_company || '';
+    form.balance_customer.value = shop.balance_customer || '';
     form.verified_at.value = shop.verified_at || '';
+    updateDifferenceDisplay();
     renderPhotos(shop.photos || []);
   } catch (err) {
     toast(err.message, 'err');
@@ -246,7 +248,8 @@ async function doSaveShopForm(shopIdAtSaveTime) {
     visit_day: form.visit_day.value,
     notes: form.notes.value,
     stock_status: form.stock_status.value,
-    balance_amount: form.balance_amount.value,
+    balance_company: form.balance_company.value,
+    balance_customer: form.balance_customer.value,
     verified_at: form.verified_at.value,
   };
   try {
@@ -284,11 +287,37 @@ shopForm.addEventListener('submit', (e) => {
 });
 
 // Text fields: debounced auto-save while typing. Dropdowns/dates: save immediately on change.
-['shop_code', 'customer_name', 'notes', 'stock_status', 'balance_amount'].forEach((name) => {
+['shop_code', 'customer_name', 'notes', 'stock_status', 'balance_company', 'balance_customer'].forEach((name) => {
   shopForm[name].addEventListener('input', () => scheduleAutoSave(false));
 });
 ['visit_day', 'verified_at'].forEach((name) => {
   shopForm[name].addEventListener('change', () => scheduleAutoSave(true));
+});
+
+// The Difference field recalculates live as either balance is typed - no save
+// round-trip needed just to see it, though the underlying save still happens
+// through the normal debounced auto-save above.
+function parseMoney(v) {
+  const n = parseFloat(String(v || '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function updateDifferenceDisplay() {
+  const company = parseMoney(shopForm.balance_company.value);
+  const customer = parseMoney(shopForm.balance_customer.value);
+  const diffField = el('#differenceDisplay');
+  if (company === null || customer === null) {
+    diffField.value = '';
+    diffField.className = '';
+    return;
+  }
+  const diff = company - customer;
+  diffField.value = diff.toLocaleString();
+  diffField.className = diff === 0 ? 'diff-zero' : 'diff-nonzero';
+}
+
+['balance_company', 'balance_customer'].forEach((name) => {
+  shopForm[name].addEventListener('input', updateDifferenceDisplay);
 });
 
 // Save whatever's pending before leaving the shop, so a fast click-away never drops an edit
@@ -374,17 +403,27 @@ el('#backupPhotosBtn').addEventListener('click', () => {
   window.open(url, '_blank');
 });
 
-// Balance is stored as free text, so parse leniently; anything unparseable
+// Balances are stored as free text, so parse leniently; anything unparseable
 // (blank, "n/a", etc.) sorts to the bottom regardless of direction.
-function balanceValue(shop) {
-  const n = parseFloat(String(shop.balance_amount || '').replace(/[^0-9.-]/g, ''));
+function parseMoneyValue(v) {
+  const n = parseFloat(String(v || '').replace(/[^0-9.-]/g, ''));
   return Number.isFinite(n) ? n : null;
+}
+// The customer-ledger balance is the field-verified figure, so it's what
+// "Balance" means throughout the dashboard/chart/sort unless noted otherwise.
+function balanceValue(shop) {
+  return parseMoneyValue(shop.balance_customer);
+}
+function differenceValue(shop) {
+  const company = parseMoneyValue(shop.balance_company);
+  const customer = parseMoneyValue(shop.balance_customer);
+  return (company === null || customer === null) ? null : company - customer;
 }
 
 function sortShops(rows, mode) {
-  const byBalance = (dir) => (a, b) => {
-    const av = balanceValue(a);
-    const bv = balanceValue(b);
+  const byNumber = (getter, dir) => (a, b) => {
+    const av = getter(a);
+    const bv = getter(b);
     if (av === null && bv === null) return a.shop_code.localeCompare(b.shop_code);
     if (av === null) return 1;
     if (bv === null) return -1;
@@ -392,8 +431,9 @@ function sortShops(rows, mode) {
   };
 
   switch (mode) {
-    case 'balance_desc': rows.sort(byBalance('desc')); break;
-    case 'balance_asc': rows.sort(byBalance('asc')); break;
+    case 'balance_desc': rows.sort(byNumber(balanceValue, 'desc')); break;
+    case 'balance_asc': rows.sort(byNumber(balanceValue, 'asc')); break;
+    case 'diff_desc': rows.sort(byNumber(s => { const d = differenceValue(s); return d === null ? null : Math.abs(d); }, 'desc')); break;
     case 'code': rows.sort((a, b) => a.shop_code.localeCompare(b.shop_code)); break;
     case 'photos_desc': rows.sort((a, b) => (b.photoCount || 0) - (a.photoCount || 0)); break;
     default: break; // server already returns van -> day -> code order
@@ -431,13 +471,16 @@ function renderDashboard() {
   const body = el('#dashboardTableBody');
   body.innerHTML = '';
   for (const s of rows) {
+    const diff = differenceValue(s);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${s.van_name}</td>
       <td>${s.visit_day ? `Day ${s.visit_day}` : '—'}</td>
       <td>${s.shop_code}</td>
       <td>${s.customer_name || '—'}</td>
-      <td>${s.balance_amount || '—'}</td>
+      <td>${s.balance_company || '—'}</td>
+      <td>${s.balance_customer || '—'}</td>
+      <td class="${diff === null ? '' : diff === 0 ? 'diff-ok' : 'diff-mismatch'}">${diff === null ? '—' : diff.toLocaleString()}</td>
       <td>${s.photoCount || 0}/8</td>
       <td>${s.verified_at || '—'}</td>
     `;
