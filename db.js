@@ -45,6 +45,8 @@ async function init() {
     );
 
     ALTER TABLE shops ADD COLUMN IF NOT EXISTS visit_day INTEGER;
+    ALTER TABLE shops ADD COLUMN IF NOT EXISTS balance_company TEXT DEFAULT '';
+    ALTER TABLE shops ADD COLUMN IF NOT EXISTS balance_customer TEXT DEFAULT '';
   `);
 
   const { rows } = await pool.query('SELECT COUNT(*)::int AS c FROM vans');
