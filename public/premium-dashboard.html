@@ -314,6 +314,7 @@
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(width, height);
   renderer.shadowMap.enabled = true;
+  renderer.outputEncoding = THREE.sRGBEncoding;
 
   scene.add(new THREE.AmbientLight(0x7fd8d0, 0.55));
   const key = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -359,12 +360,28 @@
   addWall(0, 0, -4, 0, 0, 0);               // back
   addWall(0, 0, 6.5, 0, Math.PI, 0);        // front
 
-  // ---- PETRONAS bottle: teal body + gold cap ----
-  const bottleBodyMat = new THREE.MeshStandardMaterial({ color: 0x00A19A, metalness: 0.35, roughness: 0.35 });
-  const bottleCapMat = new THREE.MeshStandardMaterial({ color: 0xFDB714, metalness: 0.6, roughness: 0.3 });
-  const bodyGeo = new THREE.CylinderGeometry(0.42, 0.46, 1.35, 16);
-  const shoulderGeo = new THREE.CylinderGeometry(0.22, 0.42, 0.22, 16);
-  const capGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.32, 16);
+  // ---- Real PETRONAS Syntium product photos, textured onto flat cards that
+  // tumble and pile like the physical bottles. The source images are official
+  // isolated product renders with alpha transparency, so each card reads as a
+  // real bottle silhouette rather than a rectangle.
+  const textureLoader = new THREE.TextureLoader();
+  const BOTTLE_IMAGES = ['assets/bottle-hybrid.png', 'assets/bottle-5000.png', 'assets/bottle-800.png'];
+  const bottleTextures = BOTTLE_IMAGES.map(src => {
+    const tex = textureLoader.load(src);
+    tex.encoding = THREE.sRGBEncoding; // this three.js build (r128) predates the colorSpace API
+    return tex;
+  });
+  const CARD_HEIGHT = 1.7;
+  const CARD_WIDTH = CARD_HEIGHT * (340 / 315); // matches the source image aspect ratio
+  const cardGeo = new THREE.PlaneGeometry(CARD_WIDTH, CARD_HEIGHT);
+  const cardMaterials = bottleTextures.map(tex => new THREE.MeshStandardMaterial({
+    map: tex,
+    transparent: true,
+    alphaTest: 0.4, // cuts out the transparent margin so it silhouettes as a bottle, not a card
+    side: THREE.DoubleSide,
+    roughness: 0.4,
+    metalness: 0.1,
+  }));
 
   const bottles = []; // { mesh, body }
   // A narrower pile footprint (portrait phones) gets fewer bottles so it piles
@@ -376,26 +393,19 @@
     if (spawned >= MAX_BOTTLES) return;
     spawned++;
 
-    const group = new THREE.Group();
-    const body = new THREE.Mesh(bodyGeo, bottleBodyMat);
-    body.castShadow = true;
-    const shoulder = new THREE.Mesh(shoulderGeo, bottleBodyMat);
-    shoulder.position.y = 0.78;
-    shoulder.castShadow = true;
-    const cap = new THREE.Mesh(capGeo, bottleCapMat);
-    cap.position.y = 1.05;
-    cap.castShadow = true;
-    group.add(body, shoulder, cap);
-    scene.add(group);
+    const material = cardMaterials[Math.floor(Math.random() * cardMaterials.length)];
+    const mesh = new THREE.Mesh(cardGeo, material);
+    mesh.castShadow = true;
+    scene.add(mesh);
 
     const x = (Math.random() - 0.5) * 2 * (halfWidth * 0.75);
     const z = (Math.random() - 0.5) * 8;
     const y = 9 + Math.random() * 4;
-    group.position.set(x, y, z);
+    mesh.position.set(x, y, z);
 
     const physBody = new CANNON.Body({
       mass: 1,
-      shape: new CANNON.Cylinder(0.42, 0.46, 1.6, 12),
+      shape: new CANNON.Box(new CANNON.Vec3(CARD_WIDTH / 2, CARD_HEIGHT / 2, 0.12)),
       position: new CANNON.Vec3(x, y, z),
       angularDamping: 0.4,
       linearDamping: 0.15,
@@ -404,7 +414,7 @@
     physBody.angularVelocity.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4);
     world.addBody(physBody);
 
-    bottles.push({ mesh: group, body: physBody });
+    bottles.push({ mesh, body: physBody });
   }
 
   // Stagger spawns so bottles fall progressively and pile up realistically
