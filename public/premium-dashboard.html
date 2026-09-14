@@ -234,6 +234,7 @@
     <input id="fSearch" type="search" placeholder="Search customer code or name..." />
   </div>
 
+  <div id="filterBanner" style="display:none;background:var(--petronas-gold);color:#042;padding:10px 16px;border-radius:8px;margin-bottom:14px;font-weight:600"></div>
   <div class="stat-tiles" id="statTiles"></div>
 
   <div class="chart-card">
@@ -373,7 +374,7 @@
   });
   const CARD_HEIGHT = 1.7;
   const CARD_WIDTH = CARD_HEIGHT * (340 / 315); // matches the source image aspect ratio
-  const CARD_DEPTH = 0.26;
+  const CARD_DEPTH = CARD_WIDTH * 0.62; // bottle-like block, not a flat card
   // A box, not a flat plane: paper-thin cards disappear when they tumble
   // edge-on to the camera. Real depth keeps them reading as solid objects
   // from every angle, front/back textured, sides a plain amber edge.
@@ -475,6 +476,7 @@
 // =========================================================================
 const el = (sel) => document.querySelector(sel);
 let allShops = [];
+const state = { onlyMismatches: false, onlyVerified: false };
 
 function toast(msg, type) {
   const t = el('#loadingToast');
@@ -553,9 +555,19 @@ function render() {
     if (van && String(s.van_id) !== van) return false;
     if (day && String(s.visit_day || '') !== day) return false;
     if (q && !s.shop_code.toLowerCase().includes(q) && !(s.customer_name || '').toLowerCase().includes(q)) return false;
+    if (state.onlyMismatches) { const d = differenceValue(s); if (d === null || d === 0) return false; }
+    if (state.onlyVerified && !s.verified_at) return false;
     return true;
   });
   rows = sortShops(rows.slice(), sort);
+
+  const banner = el('#filterBanner');
+  if (state.onlyMismatches) banner.innerHTML = 'Showing only shops with a ledger mismatch. <a href="#" id="clearSpecialFilter">Clear</a>';
+  else if (state.onlyVerified) banner.innerHTML = 'Showing only field-visit verified shops. <a href="#" id="clearSpecialFilter">Clear</a>';
+  else banner.innerHTML = '';
+  banner.style.display = (state.onlyMismatches || state.onlyVerified) ? 'block' : 'none';
+  const clearLink = el('#clearSpecialFilter');
+  if (clearLink) clearLink.onclick = (e) => { e.preventDefault(); state.onlyMismatches = false; state.onlyVerified = false; render(); };
 
   renderStats(rows, van, day);
   renderChart(rows);
@@ -573,10 +585,24 @@ function renderStats(rows, van, day) {
   el('#statTiles').innerHTML = `
     <div class="stat-tile"><div class="stat-value">${rows.length}</div><div class="stat-label">Shops (${scope})</div></div>
     <div class="stat-tile gold"><div class="stat-value">${totalBalance.toLocaleString()}</div><div class="stat-label">Total Customer-Ledger Balance (${withBalance} with a value)</div></div>
-    <div class="stat-tile"><div class="stat-value">${verified}/${rows.length}</div><div class="stat-label">Field-Visit Verified</div></div>
+    <div class="stat-tile" id="tileVerified" style="cursor:pointer"><div class="stat-value">${verified}/${rows.length}</div><div class="stat-label">Field-Visit Verified (click to filter)</div></div>
     <div class="stat-tile"><div class="stat-value">${totalPhotos}</div><div class="stat-label">Photos on Record</div></div>
-    <div class="stat-tile"><div class="stat-value" style="color:${mismatches ? 'var(--danger)' : '#4ADE80'}">${mismatches}</div><div class="stat-label">Ledger Mismatches</div></div>
+    <div class="stat-tile" id="tileMismatch" style="cursor:pointer"><div class="stat-value" style="color:${mismatches ? 'var(--danger)' : '#4ADE80'}">${mismatches}</div><div class="stat-label">Ledger Mismatches (click to view)</div></div>
   `;
+
+  el('#tileMismatch').onclick = () => {
+    state.onlyMismatches = !state.onlyMismatches;
+    state.onlyVerified = false;
+    el('#fSort').value = 'diff_desc';
+    render();
+    el('.table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  el('#tileVerified').onclick = () => {
+    state.onlyVerified = !state.onlyVerified;
+    state.onlyMismatches = false;
+    render();
+    el('.table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 }
 
 function renderChart(rows) {
@@ -712,7 +738,7 @@ document.addEventListener('keydown', (e) => {
 loadData();
 // Re-fetch periodically so numbers stay accurate if this dashboard is left open
 // for a long stretch while field agents keep entering data elsewhere.
-setInterval(loadData, 60000);
+setInterval(loadData, 300000);
 </script>
 </body>
 </html>
