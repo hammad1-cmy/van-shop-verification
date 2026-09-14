@@ -294,21 +294,21 @@
   scene.fog = new THREE.Fog(0x041615, 12, 30);
 
   const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-  const BASE_CAMERA_Z = 13;
-  const CONTAINER_HALF_WIDTH = 5.5;
+  camera.position.set(0, 4.5, 13);
+  camera.lookAt(0, 0, 0);
+
   // On a narrow portrait phone, the horizontal field of view shrinks a lot more
-  // than the vertical one - without compensating, the pile of bottles (spread
-  // across the container's full width) falls outside the frustum and the hero
-  // looks empty. Pulling the camera back on narrow screens keeps everything in view.
-  function fitCameraToAspect() {
+  // than the vertical one. Rather than pulling the camera back (which shrinks
+  // and dims the bottles), we keep the camera fixed and instead narrow the pile
+  // itself so it always fits inside whatever frustum the current screen gives us.
+  function computeHalfWidth() {
     const aspect = width / height;
     const vFovRad = (camera.fov * Math.PI) / 180;
     const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
-    const neededZ = CONTAINER_HALF_WIDTH / Math.tan(hFovRad / 2) + 4;
-    camera.position.set(0, 4.5, Math.max(BASE_CAMERA_Z, neededZ));
+    const visibleHalfWidth = camera.position.z * Math.tan(hFovRad / 2) * 0.8; // 0.8 = safety margin
+    return Math.min(5.5, Math.max(2.0, visibleHalfWidth));
   }
-  fitCameraToAspect();
-  camera.lookAt(0, 0, 0);
+  let halfWidth = computeHalfWidth();
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -352,9 +352,10 @@
     body.position.set(px, py, pz);
     body.quaternion.setFromEuler(rx, ry, rz);
     world.addBody(body);
+    return body;
   }
-  addWall(-5.5, 0, 0, 0, Math.PI / 2, 0);   // left
-  addWall(5.5, 0, 0, 0, -Math.PI / 2, 0);   // right
+  const leftWall = addWall(-halfWidth, 0, 0, 0, Math.PI / 2, 0);
+  const rightWall = addWall(halfWidth, 0, 0, 0, -Math.PI / 2, 0);
   addWall(0, 0, -4, 0, 0, 0);               // back
   addWall(0, 0, 6.5, 0, Math.PI, 0);        // front
 
@@ -366,7 +367,9 @@
   const capGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.32, 16);
 
   const bottles = []; // { mesh, body }
-  const MAX_BOTTLES = 42;
+  // A narrower pile footprint (portrait phones) gets fewer bottles so it piles
+  // up sensibly instead of towering out of frame.
+  const MAX_BOTTLES = Math.round(18 + (halfWidth / 5.5) * 24);
   let spawned = 0;
 
   function spawnBottle() {
@@ -385,7 +388,7 @@
     group.add(body, shoulder, cap);
     scene.add(group);
 
-    const x = (Math.random() - 0.5) * 9;
+    const x = (Math.random() - 0.5) * 2 * (halfWidth * 0.75);
     const z = (Math.random() - 0.5) * 8;
     const y = 9 + Math.random() * 4;
     group.position.set(x, y, z);
@@ -441,9 +444,10 @@
   window.addEventListener('resize', () => {
     width = hero.clientWidth; height = hero.clientHeight;
     camera.aspect = width / height;
-    fitCameraToAspect();
-    baseZ = camera.position.z;
     camera.updateProjectionMatrix();
+    halfWidth = computeHalfWidth();
+    leftWall.position.x = -halfWidth;
+    rightWall.position.x = halfWidth;
     renderer.setSize(width, height);
   });
 })();
