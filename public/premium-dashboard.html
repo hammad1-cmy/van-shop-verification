@@ -440,9 +440,12 @@
     camera.lookAt(0, -0.5, 0);
 
     renderer.render(scene, camera);
-    if (!window.__heroFrameLogged) {
-      window.__heroFrameLogged = true;
-      console.log('[hero] first frame rendered. bottles.length=', bottles.length, 'camera.position=', JSON.stringify(camera.position), 'camera.projectionMatrix ok=', !camera.projectionMatrix.elements.some(isNaN));
+    window.__heroDebugFrames = (window.__heroDebugFrames || 0) + 1;
+    if (window.__heroDebugFrames % 120 === 1) {
+      const first = bottles[0];
+      console.log('[hero] frame', window.__heroDebugFrames, 'bottles=', bottles.length, 'spawned=', spawned,
+        first ? ('firstBottlePos=' + JSON.stringify(first.mesh.position)) : 'no bottles yet',
+        'sceneChildren=', scene.children.length);
     }
   }
   animate();
