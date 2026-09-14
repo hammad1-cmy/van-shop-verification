@@ -450,6 +450,10 @@
     renderer.render(scene, camera);
   }
   animate();
+  window.__debugScene = scene;
+  window.__debugCamera = camera;
+  window.__debugBottles = bottles;
+  window.__debugTextures = bottleTextures;
 
   window.addEventListener('resize', () => {
     width = hero.clientWidth; height = hero.clientHeight;
