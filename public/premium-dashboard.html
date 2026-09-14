@@ -1,11 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Shah Oil Traders — Executive Dashboard</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<title>Shah Oil Traders - Executive Dashboard</title>
 <style>
   :root {
     --petronas-teal: #00A19A;
@@ -40,7 +38,15 @@
     overflow: hidden;
     background: radial-gradient(ellipse at 50% 20%, #0d3d38 0%, #041615 70%);
   }
-  #heroCanvas { position: absolute; inset: 0; display: block; }
+  .bottle-bg { position: absolute; inset: 0; overflow: hidden; }
+  .bg-bottle { position: absolute; width: 150px; filter: drop-shadow(0 20px 30px rgba(0,0,0,0.5)); animation: floatY 6s ease-in-out infinite; }
+  .b1 { bottom: 5%; left: 6%; width: 170px; animation-delay: 0s; }
+  .b2 { bottom: 8%; left: 30%; width: 140px; animation-delay: 1.2s; transform: rotate(-8deg); }
+  .b3 { bottom: 4%; left: 55%; width: 160px; animation-delay: 0.6s; transform: rotate(6deg); }
+  .b4 { bottom: 10%; left: 76%; width: 130px; animation-delay: 1.8s; transform: rotate(-4deg); }
+  .b5 { bottom: 2%; left: 90%; width: 120px; animation-delay: 0.3s; display: none; }
+  @keyframes floatY { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(-16px) rotate(var(--r,0deg)); } }
+  @media (min-width: 900px) { .b5 { display: block; } }
   #heroOverlay {
     position: absolute;
     inset: 0;
@@ -197,7 +203,13 @@
 <body>
 
 <section id="hero">
-  <canvas id="heroCanvas"></canvas>
+  <div class="bottle-bg">
+    <img src="assets/bottle-hybrid.png" class="bg-bottle b1" />
+    <img src="assets/bottle-5000.png" class="bg-bottle b2" />
+    <img src="assets/bottle-800.png" class="bg-bottle b3" />
+    <img src="assets/bottle-hybrid.png" class="bg-bottle b4" />
+    <img src="assets/bottle-5000.png" class="bg-bottle b5" />
+  </div>
   <div id="heroOverlay">
     <h1>SHAH OIL TRADERS</h1>
     <div class="sub">Authorized PETRONAS Lubricants Distributor</div>
@@ -208,7 +220,7 @@
 <main id="dash">
   <div class="dash-header">
     <h2>Verification Overview</h2>
-    <span class="badge-live" id="liveBadge">Loading…</span>
+    <span class="badge-live" id="liveBadge">Loading...</span>
     <div class="spacer"></div>
   </div>
 
@@ -284,196 +296,7 @@
 
 <script>
 // =========================================================================
-// PART 1 — 3D hero: PETRONAS bottles falling and piling up (Three.js + Cannon.js)
-// =========================================================================
-(function initHero() {
-  const canvas = document.getElementById('heroCanvas');
-  const hero = document.getElementById('hero');
-  let width = hero.clientWidth, height = hero.clientHeight;
-
-  const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x041615, 12, 30);
-
-  const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-  camera.position.set(0, 4.5, 13);
-  camera.lookAt(0, 0, 0);
-
-  // On a narrow portrait phone, the horizontal field of view shrinks a lot more
-  // than the vertical one. Rather than pulling the camera back (which shrinks
-  // and dims the bottles), we keep the camera fixed and instead narrow the pile
-  // itself so it always fits inside whatever frustum the current screen gives us.
-  function computeHalfWidth() {
-    const aspect = width / height;
-    const vFovRad = (camera.fov * Math.PI) / 180;
-    const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
-    const visibleHalfWidth = camera.position.z * Math.tan(hFovRad / 2) * 0.8; // 0.8 = safety margin
-    return Math.min(5.5, Math.max(2.0, visibleHalfWidth));
-  }
-  let halfWidth = computeHalfWidth();
-
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(width, height);
-  renderer.shadowMap.enabled = true;
-  renderer.outputEncoding = THREE.sRGBEncoding;
-
-  scene.add(new THREE.AmbientLight(0x7fd8d0, 0.55));
-  const key = new THREE.DirectionalLight(0xffffff, 1.1);
-  key.position.set(5, 10, 6);
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
-  scene.add(key);
-  const gold = new THREE.PointLight(0xFDB714, 0.8, 20);
-  gold.position.set(-4, 3, 4);
-  scene.add(gold);
-
-  // Invisible ground for shadow catch
-  const groundGeo = new THREE.PlaneGeometry(40, 40);
-  const groundMat = new THREE.ShadowMaterial({ opacity: 0.35 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -3;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // ---- Physics world ----
-  const world = new CANNON.World();
-  world.gravity.set(0, -9.8, 0);
-  world.broadphase = new CANNON.NaiveBroadphase();
-  world.solver.iterations = 10;
-
-  const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
-  groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-  groundBody.position.set(0, -3, 0);
-  world.addBody(groundBody);
-
-  // Container walls so bottles pile instead of scattering off-frame
-  const wallMaterial = new CANNON.Material();
-  function addWall(px, py, pz, rx, ry, rz) {
-    const body = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: wallMaterial });
-    body.position.set(px, py, pz);
-    body.quaternion.setFromEuler(rx, ry, rz);
-    world.addBody(body);
-    return body;
-  }
-  const leftWall = addWall(-halfWidth, 0, 0, 0, Math.PI / 2, 0);
-  const rightWall = addWall(halfWidth, 0, 0, 0, -Math.PI / 2, 0);
-  addWall(0, 0, -4, 0, 0, 0);               // back
-  addWall(0, 0, 6.5, 0, Math.PI, 0);        // front
-
-  // ---- Real PETRONAS Syntium product photos, textured onto flat cards that
-  // tumble and pile like the physical bottles. The source images are official
-  // isolated product renders with alpha transparency, so each card reads as a
-  // real bottle silhouette rather than a rectangle.
-  const textureLoader = new THREE.TextureLoader();
-  const BOTTLE_IMAGES = ['assets/bottle-hybrid.png', 'assets/bottle-5000.png', 'assets/bottle-800.png'];
-  const bottleTextures = BOTTLE_IMAGES.map(src => {
-    const tex = textureLoader.load(src);
-    tex.encoding = THREE.sRGBEncoding; // this three.js build (r128) predates the colorSpace API
-    return tex;
-  });
-  const CARD_HEIGHT = 1.7;
-  const CARD_WIDTH = CARD_HEIGHT * (340 / 315); // matches the source image aspect ratio
-  const CARD_DEPTH = CARD_WIDTH * 0.24; // realistic bottle width:depth proportion
-  // A box, not a flat plane: paper-thin cards disappear when they tumble
-  // edge-on to the camera. Real depth keeps them reading as solid objects
-  // from every angle, front/back textured, sides a dark neutral edge (not a
-  // bright solid color, which reads as an ugly "mark" rather than a bottle side).
-  const cardGeo = new THREE.BoxGeometry(CARD_WIDTH, CARD_HEIGHT, CARD_DEPTH);
-  const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0x14201f, roughness: 0.7, metalness: 0.1 });
-  const cardMaterialSets = bottleTextures.map(tex => {
-    const faceMat = new THREE.MeshStandardMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.4,
-      roughness: 0.4,
-      metalness: 0.1,
-    });
-    // BoxGeometry face order: +x, -x, +y, -y, +z (front), -z (back)
-    return [edgeMaterial, edgeMaterial, edgeMaterial, edgeMaterial, faceMat, faceMat];
-  });
-
-  const bottles = []; // { mesh, body }
-  // A narrower pile footprint (portrait phones) gets fewer bottles so it piles
-  // up sensibly instead of towering out of frame.
-  const MAX_BOTTLES = Math.round(18 + (halfWidth / 5.5) * 24);
-  let spawned = 0;
-
-  function spawnBottle() {
-    if (spawned >= MAX_BOTTLES) return;
-    spawned++;
-
-    const materials = cardMaterialSets[Math.floor(Math.random() * cardMaterialSets.length)];
-    const mesh = new THREE.Mesh(cardGeo, materials);
-    mesh.castShadow = true;
-    scene.add(mesh);
-
-    const x = (Math.random() - 0.5) * 2 * (halfWidth * 0.75);
-    const z = (Math.random() - 0.5) * 8;
-    const y = 9 + Math.random() * 4;
-    mesh.position.set(x, y, z);
-
-    const physBody = new CANNON.Body({
-      mass: 1,
-      shape: new CANNON.Box(new CANNON.Vec3(CARD_WIDTH / 2, CARD_HEIGHT / 2, CARD_DEPTH / 2)),
-      position: new CANNON.Vec3(x, y, z),
-      angularDamping: 0.4,
-      linearDamping: 0.15,
-    });
-    physBody.quaternion.setFromEuler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    physBody.angularVelocity.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4);
-    world.addBody(physBody);
-
-    bottles.push({ mesh, body: physBody });
-  }
-
-  // Stagger spawns so bottles fall progressively and pile up realistically
-  let spawnTimer = 0;
-  let baseZ = camera.position.z;
-  const clock = new THREE.Clock();
-
-  function animate() {
-    requestAnimationFrame(animate);
-    const dt = Math.min(clock.getDelta(), 0.05);
-
-    spawnTimer += dt;
-    if (spawnTimer > 0.22 && spawned < MAX_BOTTLES) {
-      spawnTimer = 0;
-      spawnBottle();
-    }
-
-    world.step(1 / 60, dt, 3);
-    for (const b of bottles) {
-      b.mesh.position.copy(b.body.position);
-      b.mesh.quaternion.copy(b.body.quaternion);
-    }
-
-    // Gentle idle camera drift for a premium, "alive" feel - drifts around the
-    // aspect-appropriate distance rather than a hardcoded one, so narrow phones
-    // keep the whole pile in frame.
-    const t = performance.now() * 0.00012;
-    camera.position.x = Math.sin(t) * 1.2;
-    camera.position.y = 4.5 + Math.sin(t * 1.7) * 0.3;
-    camera.position.z = baseZ + Math.sin(t * 0.8) * 0.4;
-    camera.lookAt(0, -0.5, 0);
-
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  window.addEventListener('resize', () => {
-    width = hero.clientWidth; height = hero.clientHeight;
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    halfWidth = computeHalfWidth();
-    leftWall.position.x = -halfWidth;
-    rightWall.position.x = halfWidth;
-    renderer.setSize(width, height);
-  });
-})();
-
-// =========================================================================
-// PART 2 — Live, accurate dashboard (reads the same API as the main site)
+// PART 2 - Live, accurate dashboard (reads the same API as the main site)
 // =========================================================================
 const el = (sel) => document.querySelector(sel);
 let allShops = [];
@@ -533,7 +356,7 @@ function sortShops(rows, mode) {
 async function loadData() {
   try {
     allShops = await api('/api/dashboard/shops');
-    el('#liveBadge').textContent = `LIVE — ${allShops.length} shops`;
+    el('#liveBadge').textContent = `LIVE - ${allShops.length} shops`;
     render();
   } catch (err) {
     el('#liveBadge').textContent = 'Error loading data';
@@ -635,14 +458,14 @@ function renderTable(rows) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${s.van_name}</td>
-      <td>${s.visit_day ? `Day ${s.visit_day}` : '—'}</td>
+      <td>${s.visit_day ? `Day ${s.visit_day}` : '-'}</td>
       <td>${s.shop_code}</td>
-      <td>${s.customer_name || '—'}</td>
-      <td>${s.balance_company || '—'}</td>
-      <td>${s.balance_customer || '—'}</td>
-      <td class="${diff === null ? '' : diff === 0 ? 'diff-ok' : 'diff-mismatch'}">${diff === null ? '—' : diff.toLocaleString()}</td>
+      <td>${s.customer_name || '-'}</td>
+      <td>${s.balance_company || '-'}</td>
+      <td>${s.balance_customer || '-'}</td>
+      <td class="${diff === null ? '' : diff === 0 ? 'diff-ok' : 'diff-mismatch'}">${diff === null ? '-' : diff.toLocaleString()}</td>
       <td>${s.photoCount || 0}/8</td>
-      <td>${s.verified_at || '—'}</td>
+      <td>${s.verified_at || '-'}</td>
     `;
     tr.onclick = () => openShopModal(s.id);
     body.appendChild(tr);
@@ -663,21 +486,21 @@ async function openShopModal(id) {
     const diff = differenceValue(shop);
     const fields = [
       ['Customer Code', shop.shop_code],
-      ['Customer Name', shop.customer_name || '—'],
+      ['Customer Name', shop.customer_name || '-'],
       ['Van', (allShops.find(s => s.id === shop.id) || {}).van_name || ''],
       ['Day', shop.visit_day ? `Day ${shop.visit_day}` : 'Not set'],
-      ['Actual Field Visit Date', shop.verified_at || '—'],
-      ['Stock Status', shop.stock_status || '—'],
-      ['Balance as per Shah Oil Traders Ledger', shop.balance_company || '—'],
-      ['Balance as per Customer Ledger', shop.balance_customer || '—'],
+      ['Actual Field Visit Date', shop.verified_at || '-'],
+      ['Stock Status', shop.stock_status || '-'],
+      ['Balance as per Shah Oil Traders Ledger', shop.balance_company || '-'],
+      ['Balance as per Customer Ledger', shop.balance_customer || '-'],
     ];
     let html = fields.map(([label, val]) => `
       <div class="detail-field"><label>${label}</label><div class="val">${val}</div></div>
     `).join('');
-    html += `<div class="detail-field diff"><label>Difference</label><div class="val ${diff === null ? '' : diff === 0 ? 'diff-ok' : 'diff-mismatch'}">${diff === null ? '—' : diff.toLocaleString()}</div></div>`;
-    html += `<div class="detail-field wide"><label>Remarks</label><div class="val">${shop.notes || '—'}</div></div>`;
-    html += `<div class="detail-field"><label>Created</label><div class="val">${shop.created_at ? new Date(shop.created_at).toLocaleString() : '—'}</div></div>`;
-    html += `<div class="detail-field"><label>Last Updated</label><div class="val">${shop.updated_at ? new Date(shop.updated_at).toLocaleString() : '—'}</div></div>`;
+    html += `<div class="detail-field diff"><label>Difference</label><div class="val ${diff === null ? '' : diff === 0 ? 'diff-ok' : 'diff-mismatch'}">${diff === null ? '-' : diff.toLocaleString()}</div></div>`;
+    html += `<div class="detail-field wide"><label>Remarks</label><div class="val">${shop.notes || '-'}</div></div>`;
+    html += `<div class="detail-field"><label>Created</label><div class="val">${shop.created_at ? new Date(shop.created_at).toLocaleString() : '-'}</div></div>`;
+    html += `<div class="detail-field"><label>Last Updated</label><div class="val">${shop.updated_at ? new Date(shop.updated_at).toLocaleString() : '-'}</div></div>`;
     el('#modalFields').innerHTML = html;
 
     modalPhotos = (shop.photos || []).filter(p => p.signed_url);
