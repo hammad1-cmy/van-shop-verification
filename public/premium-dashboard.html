@@ -286,11 +286,9 @@
 // PART 1 — 3D hero: PETRONAS bottles falling and piling up (Three.js + Cannon.js)
 // =========================================================================
 (function initHero() {
-  try {
   const canvas = document.getElementById('heroCanvas');
   const hero = document.getElementById('hero');
   let width = hero.clientWidth, height = hero.clientHeight;
-  console.log('[hero] init width/height:', width, height);
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x041615, 12, 30);
@@ -440,13 +438,6 @@
     camera.lookAt(0, -0.5, 0);
 
     renderer.render(scene, camera);
-    window.__heroDebugFrames = (window.__heroDebugFrames || 0) + 1;
-    if (window.__heroDebugFrames % 120 === 1) {
-      const first = bottles[0];
-      console.log('[hero] frame', window.__heroDebugFrames, 'bottles=', bottles.length, 'spawned=', spawned,
-        first ? ('firstBottlePos=' + JSON.stringify(first.mesh.position)) : 'no bottles yet',
-        'sceneChildren=', scene.children.length);
-    }
   }
   animate();
 
@@ -459,10 +450,6 @@
     rightWall.position.x = halfWidth;
     renderer.setSize(width, height);
   });
-  console.log('[hero] setup complete, halfWidth:', halfWidth, 'MAX_BOTTLES:', MAX_BOTTLES);
-  } catch (err) {
-    console.error('[hero] FAILED:', err);
-  }
 })();
 
 // =========================================================================
