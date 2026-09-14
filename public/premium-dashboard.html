@@ -373,15 +373,23 @@
   });
   const CARD_HEIGHT = 1.7;
   const CARD_WIDTH = CARD_HEIGHT * (340 / 315); // matches the source image aspect ratio
-  const cardGeo = new THREE.PlaneGeometry(CARD_WIDTH, CARD_HEIGHT);
-  const cardMaterials = bottleTextures.map(tex => new THREE.MeshStandardMaterial({
-    map: tex,
-    transparent: true,
-    alphaTest: 0.4, // cuts out the transparent margin so it silhouettes as a bottle, not a card
-    side: THREE.DoubleSide,
-    roughness: 0.4,
-    metalness: 0.1,
-  }));
+  const CARD_DEPTH = 0.55;
+  // A box, not a flat plane: paper-thin cards disappear when they tumble
+  // edge-on to the camera. Real depth keeps them reading as solid objects
+  // from every angle, front/back textured, sides a plain amber edge.
+  const cardGeo = new THREE.BoxGeometry(CARD_WIDTH, CARD_HEIGHT, CARD_DEPTH);
+  const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0xC9A227, roughness: 0.5, metalness: 0.3 });
+  const cardMaterialSets = bottleTextures.map(tex => {
+    const faceMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      transparent: true,
+      alphaTest: 0.4,
+      roughness: 0.4,
+      metalness: 0.1,
+    });
+    // BoxGeometry face order: +x, -x, +y, -y, +z (front), -z (back)
+    return [edgeMaterial, edgeMaterial, edgeMaterial, edgeMaterial, faceMat, faceMat];
+  });
 
   const bottles = []; // { mesh, body }
   // A narrower pile footprint (portrait phones) gets fewer bottles so it piles
@@ -393,8 +401,8 @@
     if (spawned >= MAX_BOTTLES) return;
     spawned++;
 
-    const material = cardMaterials[Math.floor(Math.random() * cardMaterials.length)];
-    const mesh = new THREE.Mesh(cardGeo, material);
+    const materials = cardMaterialSets[Math.floor(Math.random() * cardMaterialSets.length)];
+    const mesh = new THREE.Mesh(cardGeo, materials);
     mesh.castShadow = true;
     scene.add(mesh);
 
@@ -405,7 +413,7 @@
 
     const physBody = new CANNON.Body({
       mass: 1,
-      shape: new CANNON.Box(new CANNON.Vec3(CARD_WIDTH / 2, CARD_HEIGHT / 2, 0.12)),
+      shape: new CANNON.Box(new CANNON.Vec3(CARD_WIDTH / 2, CARD_HEIGHT / 2, CARD_DEPTH / 2)),
       position: new CANNON.Vec3(x, y, z),
       angularDamping: 0.4,
       linearDamping: 0.15,
@@ -450,10 +458,6 @@
     renderer.render(scene, camera);
   }
   animate();
-  window.__debugScene = scene;
-  window.__debugCamera = camera;
-  window.__debugBottles = bottles;
-  window.__debugTextures = bottleTextures;
 
   window.addEventListener('resize', () => {
     width = hero.clientWidth; height = hero.clientHeight;
