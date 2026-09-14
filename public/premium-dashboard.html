@@ -374,12 +374,13 @@
   });
   const CARD_HEIGHT = 1.7;
   const CARD_WIDTH = CARD_HEIGHT * (340 / 315); // matches the source image aspect ratio
-  const CARD_DEPTH = CARD_WIDTH * 0.32; // bottle-like block, not a flat card
+  const CARD_DEPTH = CARD_WIDTH * 0.24; // realistic bottle width:depth proportion
   // A box, not a flat plane: paper-thin cards disappear when they tumble
   // edge-on to the camera. Real depth keeps them reading as solid objects
-  // from every angle, front/back textured, sides a plain amber edge.
+  // from every angle, front/back textured, sides a dark neutral edge (not a
+  // bright solid color, which reads as an ugly "mark" rather than a bottle side).
   const cardGeo = new THREE.BoxGeometry(CARD_WIDTH, CARD_HEIGHT, CARD_DEPTH);
-  const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0xC9A227, roughness: 0.5, metalness: 0.3 });
+  const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0x14201f, roughness: 0.7, metalness: 0.1 });
   const cardMaterialSets = bottleTextures.map(tex => {
     const faceMat = new THREE.MeshStandardMaterial({
       map: tex,
