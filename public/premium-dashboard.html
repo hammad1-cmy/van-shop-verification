@@ -294,7 +294,20 @@
   scene.fog = new THREE.Fog(0x041615, 12, 30);
 
   const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-  camera.position.set(0, 4.5, 13);
+  const BASE_CAMERA_Z = 13;
+  const CONTAINER_HALF_WIDTH = 5.5;
+  // On a narrow portrait phone, the horizontal field of view shrinks a lot more
+  // than the vertical one - without compensating, the pile of bottles (spread
+  // across the container's full width) falls outside the frustum and the hero
+  // looks empty. Pulling the camera back on narrow screens keeps everything in view.
+  function fitCameraToAspect() {
+    const aspect = width / height;
+    const vFovRad = (camera.fov * Math.PI) / 180;
+    const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
+    const neededZ = CONTAINER_HALF_WIDTH / Math.tan(hFovRad / 2) + 4;
+    camera.position.set(0, 4.5, Math.max(BASE_CAMERA_Z, neededZ));
+  }
+  fitCameraToAspect();
   camera.lookAt(0, 0, 0);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -393,6 +406,7 @@
 
   // Stagger spawns so bottles fall progressively and pile up realistically
   let spawnTimer = 0;
+  let baseZ = camera.position.z;
   const clock = new THREE.Clock();
 
   function animate() {
@@ -411,10 +425,13 @@
       b.mesh.quaternion.copy(b.body.quaternion);
     }
 
-    // Gentle idle camera drift for a premium, "alive" feel
+    // Gentle idle camera drift for a premium, "alive" feel - drifts around the
+    // aspect-appropriate distance rather than a hardcoded one, so narrow phones
+    // keep the whole pile in frame.
     const t = performance.now() * 0.00012;
     camera.position.x = Math.sin(t) * 1.2;
     camera.position.y = 4.5 + Math.sin(t * 1.7) * 0.3;
+    camera.position.z = baseZ + Math.sin(t * 0.8) * 0.4;
     camera.lookAt(0, -0.5, 0);
 
     renderer.render(scene, camera);
@@ -424,6 +441,8 @@
   window.addEventListener('resize', () => {
     width = hero.clientWidth; height = hero.clientHeight;
     camera.aspect = width / height;
+    fitCameraToAspect();
+    baseZ = camera.position.z;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
   });
